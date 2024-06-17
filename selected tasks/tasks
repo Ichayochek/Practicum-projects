@@ -1,1 +1,312 @@
+1) Выгрузите все поля таблицы vote_types. Добавьте к таблице поле rank,
+в которое войдут номера записей в обратном порядке. Таблица должна быть отсортирована по полю id.
+-------------------------------------------------------------------------------------------------------------------
+SELECT *,
+       ROW_NUMBER() OVER(ORDER BY id DESC) AS rank
+FROM stackoverflow.vote_types
+ORDER BY id;
 
+-------------------------------------------------------------------------------------------------------------------
+2) Отберите 10 пользователей, которые поставили больше всего голосов типа Close. 
+Отобразите таблицу из двух полей: идентификатором пользователя и количеством голосов. 
+Отсортируйте данные сначала по убыванию количества голосов, потом по убыванию значения идентификатора пользователя.
+-------------------------------------------------------------------------------------------------------------------
+
+WITH voice_numbers AS (
+SELECT sv.user_id,
+    COUNT(svt.name) OVER (PARTITION BY sv.user_id ORDER BY sv.user_id) AS sum_thing
+    FROM stackoverflow.vote_types AS svt
+    JOIN stackoverflow.votes AS sv ON sv.vote_type_id=svt.id
+WHERE svt.name = 'Close'
+)
+
+SELECT user_id,
+        sum_thing
+    FROM voice_numbers
+GROUP BY user_id,sum_thing
+ORDER BY sum_thing desc,user_id desc
+LIMIT 10 
+
+-----------------------------------------------------------------------------------------------------------------------
+3) Отберите 10 пользователей по количеству значков, полученных в период с 15 ноября по 15 декабря 2008 года включительно.
+Отобразите несколько полей:
+идентификатор пользователя;
+число значков;
+место в рейтинге — чем больше значков, тем выше рейтинг.
+Пользователям, которые набрали одинаковое количество значков, присвойте одно и то же место в рейтинге.
+Отсортируйте записи по количеству значков по убыванию, а затем по возрастанию значения идентификатора пользователя.
+------------------------------------------------------------------------------------------------------------------------
+
+WITH 
+counted AS(
+SELECT user_id,
+    count(id) AS count_badges
+    FROM stackoverflow.badges
+    WHERE creation_date::date BETWEEN '2008-11-15' AND  '2008-12-15'
+    GROUP BY user_id
+    ORDER BY count_badges DESC
+    limit 10
+)
+
+SELECT  user_id,
+        count_badges,
+        DENSE_RANK() OVER (ORDER BY count_badges DESC)
+FROM counted
+
+ORDER BY count_badges DESC, user_id ASC
+
+------------------------------------------------------------------------------------------------------------------------
+4) Посчитайте ежедневный прирост новых пользователей в ноябре 2008 года. Сформируйте таблицу с полями:
+номер дня;
+число пользователей, зарегистрированных в этот день;
+сумму пользователей с накоплением.
+------------------------------------------------------------------------------------------------------------------------
+
+WITH count_dayly AS (
+SELECT  extract(DAY FROM creation_date::date) AS days,
+        COUNT(id) OVER (partition by DATE_TRUNC('day',creation_date::date)) AS dayly_sum
+FROM stackoverflow.users
+WHERE DATE_TRUNC('month',creation_date::date)='2008-11-01'
+)
+SELECT  
+    days,
+    dayly_sum,
+    sum(dayly_sum) OVER (ORDER BY days)
+FROM count_dayly
+GROUP BY days, dayly_sum
+
+------------------------------------------------------------------------------------------------------------------------
+5) На сколько процентов менялось количество постов ежемесячно с 1 сентября по 31 декабря 2008 года? Отобразите таблицу со следующими полями:
+Номер месяца.
+Количество постов за месяц.
+Процент, который показывает, насколько изменилось количество постов в текущем месяце по сравнению с предыдущим.
+Если постов стало меньше, значение процента должно быть отрицательным, если больше — положительным. Округлите значение процента до двух знаков после запятой.
+------------------------------------------------------------------------------------------------------------------------
+
+      
+WITH month_post AS (SELECT EXTRACT(MONTH from creation_date::date) AS month,
+                    COUNT(id)    
+                    FROM stackoverflow.posts
+                    WHERE creation_date::date BETWEEN '2008-09-01' AND '2008-12-31'
+                    GROUP BY month)
+
+SELECT *,
+       ROUND(((count::numeric / LAG(count) OVER (ORDER BY month)) - 1) * 100, 2) AS user_growth
+FROM month_post;
+
+------------------------------------------------------------------------------------------------------------------------
+6) Найдите пользователя, который опубликовал больше всего постов за всё время с момента регистрации. Выведите данные его активности за октябрь 2008 года в таком виде:
+номер недели;
+дата и время последнего поста, опубликованного на этой неделе.
+------------------------------------------------------------------------------------------------------------------------
+
+    
+WITH 
+max_user AS(
+    SELECT user_id,
+        COUNT(sp.id) AS counted_users_posts
+           FROM stackoverflow.posts AS sp
+    GROUP BY user_id
+        ORDER BY counted_users_posts DESC
+        limit 1
+     ),
+
+weekers AS (
+SELECT 
+    max(sp.creation_date) OVER (PARTITION BY EXTRACT('WEEK' from sp.creation_date::date)) as last_week_activity,
+    EXTRACT('WEEK' from sp.creation_date::date) AS fouDED       
+    FROM max_user AS cp
+    JOIN stackoverflow.posts AS sp ON sp.user_id=cp.user_id
+    WHERE DATE_TRUNC('month',sp.creation_date::date)='2008-10-01'
+--    GROUP BY EXTRACT('WEEK' from sp.creation_date::date)
+ )
+    SELECT * 
+    FROM weekers
+    GROUP BY fouDED,last_week_activity
+
+------------------------------------------------------------------------------------------------------------------------
+7) Вывести количество договоров, уникальных учеников, объем продаж, договоров на уникальных учеников и средний чек предпродаж сгруппированных по сезону продаж.
+Условия:
+1. Есть платеж Payment number=1
+2.  Дата фактического платежа не пустая
+3. Сортировка по объему продажи по убыванию
+4. Предпродажей являются договоры, у которых сезон обучение позже, чем сезон продажи. Например, если сезон продажи 2022-2023, а сезон обучения 2023-2024, то такой договор будет являться предпрода
+------------------------------------------------------------------------------------------------------------------------
+
+WITH 
+
+-- Выборка подходящих записей
+realized_paiments_1 AS
+(
+SELECT 
+-- Отсюда количество договоров + сезоны
+-- Все договора уникальны (проверено)
+	"Season sale",	
+-- Отсюда число уникальных учеников
+	"id Сounterparties",	
+-- Отсюда фактический объём продаж	
+	"Actual payment amount",
+-- Отсюда предпродажи	
+	"Season training"
+	-----------------------------------------------------
+FROM payments p 
+	INNER JOIN agreements a ON a."id Agreement" = p."id Agreement" 
+	-----------------------------------------------------
+		WHERE 
+			"Payment number" = 1	
+				AND
+			"Actual payment date" IS NOT NULL
+),
+
+-- Простые вычисления для дальнейших расчётов
+base_calcs AS 
+(
+SELECT "Season sale",
+-- Количество договоров
+	count("Actual payment amount") AS Agreements,
+-- Количество уникальных учеников	
+	count(DISTINCT "id Сounterparties") AS Students,
+-- Объём продаж	
+	sum("Actual payment amount") AS Amount
+FROM realized_paiments_1
+	GROUP BY "Season sale"
+),
+
+-- Средний чек предпродаж
+presales AS 
+(
+SELECT 
+	"Season sale",
+	round(avg("Actual payment amount")::NUMERIC,2) AS Average_check
+FROM realized_paiments_1
+WHERE RIGHT("Season sale",4)::NUMERIC<RIGHT("Season training",4)::NUMERIC
+GROUP BY "Season sale"
+)
+
+SELECT 
+	bc."Season sale",
+	Agreements AS "Agreements",
+	Students AS "Students",
+	Amount AS "Amount",
+	round((Agreements::numeric/Students),2) AS "Agreements_Сounterparties",
+	Average_check AS "Average_check"
+
+FROM base_calcs AS bc
+	LEFT JOIN presales AS ps ON bc."Season sale"=ps."Season sale"
+	GROUP BY bc."Season sale", Agreements,Students,Amount,Average_check
+	ORDER BY Amount	DESC 										
+
+------------------------------------------------------------------------------------------------------------------------
+8) "У каждого ученика вывести его год выпуска и количество договоров
+Условия:
+1. Есть платеж Payment number=1
+2.  Дата фактического платежа не пустая
+3. Сотрировка по количеству договоров по возрастанию
+4. Необходимо учесть, что ученик может купить договор сезона обучения 2022-2023 и сегмент 10 класса, значит, что его год выпуска 2024 и т.д. Лучше всего продумать такую логику, при которой код будет работать долгие годы и не придется дописывать в код дополнительные условия"					
+------------------------------------------------------------------------------------------------------------------------
+											
+SELECT 
+ ""id Сounterparties"" AS id_Student, 
+ RIGHT(""Season training"",4)::NUMERIC + 11-""Segment"" AS ""Year_of_issue"",
+ count(a.""id Agreement"")AS ""Agreements""
+ -----------------------------------------------------
+FROM agreements a 
+INNER JOIN payments p ON a.""id Agreement""=p.""id Agreement""
+ -----------------------------------------------------
+ WHERE 
+  ""Payment number"" = 1 
+   AND
+  ""Actual payment date"" IS NOT NULL
+ GROUP BY ""id Сounterparties"", ""Season training"",""Segment""
+ ORDER BY ""Agreements""											
+											
+------------------------------------------------------------------------------------------------------------------------
+"Вывести количество просрочных платежей сгруппированных по подразделению lvl1, уникальное количество менеджеров, у которых есть просроченный платеж, менеджеров всего в отделе и %менеджеров с просроченными платежами. Подразделение lvl1 преобразовать так, что если в названии содержится ""Старшая школа"", то отображалось ""ОП Старшая школа"", а если содержится ""Средняя школа"" или ""Екатеринбург+НН+НСК"", то ""ОП Средняя школа""
+Условия:
+1. Дата фактического платежа не пустая
+2. Дата фактического платежа позже, чем дата запланированного платежа
+3. Объем фактического платежа не отрицательный и не пустой"					
+------------------------------------------------------------------------------------------------------------------------
+											
+WITH
+count_managers AS 
+(
+SELECT 
+ CASE 
+   WHEN ""BE_lvl1"" LIKE '%таршая школа%' 
+    THEN 'ОП Старшая школа'
+   WHEN 
+    ""BE_lvl1"" LIKE '%редняя школа%'
+    OR
+    ""BE_lvl1"" LIKE '%Екатеринбург+НН+НСК%'
+    THEN 'ОП Средняя школа'
+    
+ END AS ""BE_lvl1"",
+ count(DISTINCT ""id Manager"") AS c_managers
+ 
+FROM managers 
+GROUP BY 
+CASE 
+   WHEN ""BE_lvl1"" LIKE '%таршая школа%' 
+    THEN 'ОП Старшая школа'
+   WHEN 
+    ""BE_lvl1"" LIKE '%редняя школа%'
+    OR
+    ""BE_lvl1"" LIKE '%Екатеринбург+НН+НСК%'
+    THEN 'ОП Средняя школа'
+    
+ END 
+),
+------------------------------------
+basic_counts AS 
+(
+SELECT 
+ CASE 
+   WHEN ""BE_lvl1"" LIKE '%таршая школа%' 
+    THEN 'ОП Старшая школа'
+   WHEN 
+    ""BE_lvl1"" LIKE '%редняя школа%'
+    OR
+    ""BE_lvl1"" LIKE '%Екатеринбург+НН+НСК%'
+    THEN 'ОП Средняя школа'
+    
+ END AS ""BE_lvl1"",
+ 
+ count(p.""id Payment"") AS Late_payments, 
+ count(DISTINCT m.""id Manager"") AS Late_managers
+ 
+FROM managers AS m
+inner JOIN Agreements AS a ON m.""id Manager""=a.""id Manager""
+INNER JOIN payments AS p ON a.""id Agreement""=p.""id Agreement""
+
+WHERE 
+ ""Actual payment date"" IS NOT NULL
+ AND
+ ""Actual payment date"">""Scheduled payment date""
+ AND 
+ ""Actual payment amount"" IS NOT NULL
+ AND
+ ""Actual payment amount"">0
+ GROUP BY 
+ CASE 
+   WHEN ""BE_lvl1"" LIKE '%таршая школа%' 
+    THEN 'ОП Старшая школа'
+   WHEN 
+    ""BE_lvl1"" LIKE '%редняя школа%'
+    OR
+    ""BE_lvl1"" LIKE '%Екатеринбург+НН+НСК%'
+    THEN 'ОП Средняя школа'
+    
+ END
+)
+--------------------------
+
+SELECT 
+ nd.""BE_lvl1"",
+ Late_payments AS ""Late_payments"",
+ Late_managers AS ""Late_managers"",
+ c_managers AS ""Managers"",
+ to_char(round(Late_managers::decimal/c_managers,3)*100,'999D99%') AS ""%Late_managers""
+FROM basic_counts AS nd 
+INNER JOIN count_managers AS cm ON cm.""BE_lvl1""=nd.""BE_lvl1""
+								

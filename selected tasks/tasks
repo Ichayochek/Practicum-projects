@@ -309,4 +309,43 @@ SELECT
  to_char(round(Late_managers::decimal/c_managers,3)*100,'999D99%') AS ""%Late_managers""
 FROM basic_counts AS nd 
 INNER JOIN count_managers AS cm ON cm.""BE_lvl1""=nd.""BE_lvl1""
-								
+
+------------------------------------------------------------------------------------------------------------------------
+ДАЛЕЕ ЗАДАЧИ С SQL-EX.RU
+------------------------------------------------------------------------------------------------------------------------
+10) Перечислите номера моделей любых типов, имеющих самую высокую цену по всей имеющейся в базе данных продукции.
+------------------------------------------------------------------------------------------------------------------------
+
+with list as(
+select model,price
+from pc
+union all
+select model,price
+from laptop
+union all
+select model,price
+from Printer
+)
+select distinct model 
+from list
+where price=(select max(price) from list)
+
+
+------------------------------------------------------------------------------------------------------------------------
+11) Найдите производителей, которые производили бы как ПК
+со скоростью не менее 750 МГц, так и ПК-блокноты со скоростью не менее 750 МГц.
+Вывести: Maker
+------------------------------------------------------------------------------------------------------------------------
+
+select maker
+from pc as p
+left join product as pr 
+on p.model=pr.model
+where speed>=750
+INTERSECT
+select maker
+from laptop as l
+left join product as pr 
+on l.model=pr.model
+where speed>=750
+
